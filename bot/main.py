@@ -196,7 +196,7 @@ async def handle_document(message: Message, state: FSMContext):
     file_name = (doc.file_name or "").lower()
 
     if not (file_name.endswith(".zip") or file_name.endswith(".html") or file_name.endswith(".htm")):
-        await message.reply(
+        await message.answer(
             "⚠️ Пожалуйста, отправь файл формата <b>.zip</b> (архив проекта) "
             "или <b>.html</b> (веб-страница).",
             parse_mode="HTML"
@@ -205,7 +205,7 @@ async def handle_document(message: Message, state: FSMContext):
 
     if doc.file_size and doc.file_size > MAX_FILE_SIZE_BYTES:
         mb_size = doc.file_size / (1024 * 1024)
-        await message.reply(
+        await message.answer(
             f"❌ Размер файла слишком большой ({mb_size:.1f} МБ). "
             f"Лимит Telegram Bot API — до 20 МБ.",
             parse_mode="HTML"
@@ -226,7 +226,7 @@ async def handle_document(message: Message, state: FSMContext):
         if cleaned:
             suggested_name = cleaned[:30]
 
-    await message.reply(
+    await message.answer(
         f"✅ Файл <code>{doc.file_name}</code> принят!\n\n"
         f"🎯 <b>Введи имя приложения</b> (оно будет отображаться на экране смартфона под иконкой):\n"
         f"Или нажми кнопку ниже для быстрого старта.",
@@ -247,6 +247,20 @@ async def handle_text(message: Message, state: FSMContext):
         await ask_for_icon(message, state, app_name)
         return
 
+    # If we are waiting for an icon but user sent text instead
+    if current_state == BuildStates.waiting_for_icon.state:
+        text_lower = message.text.strip().lower()
+        if text_lower in ("пропустить", "skip", "дальше", "далее", "нет", "без иконки"):
+            await process_build_request(message, state, icon_file_id="")
+            return
+        await message.answer(
+            "🖼 Ты на шаге выбора иконки.\n"
+            "Отправь <b>фото/картинку</b>, либо нажми кнопку ниже, чтобы пропустить:",
+            parse_mode="HTML",
+            reply_markup=get_icon_keyboard()
+        )
+        return
+
     # Check if text looks like HTML code
     text = message.text.strip()
     looks_like_html = (
@@ -258,7 +272,7 @@ async def handle_text(message: Message, state: FSMContext):
     )
 
     if looks_like_html:
-        processing_msg = await message.reply("⏳ Оборачиваю ваш HTML-код в <code>index.html</code>...", parse_mode="HTML")
+        processing_msg = await message.answer("⏳ Оборачиваю ваш HTML-код в <code>index.html</code>...", parse_mode="HTML")
         file_bytes = text.encode("utf-8")
         if len(file_bytes) > MAX_FILE_SIZE_BYTES:
             await processing_msg.edit_text("❌ Размер HTML-кода превышает 20 МБ.")
@@ -282,7 +296,7 @@ async def handle_text(message: Message, state: FSMContext):
             reply_markup=get_default_keyboard()
         )
     else:
-        await message.reply(
+        await message.answer(
             "💡 Чтобы начать сборку APK, отправь мне <b>.zip</b> архив проекта, "
             "<b>.html</b> файл или <b>HTML-код</b> прямо сообщением.\n\n"
             "Справка: /help",
@@ -431,6 +445,7 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
     logger.info("Starting VibeAPK Builder Telegram Bot...")
     try:
+        await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
         await runner.cleanup()
