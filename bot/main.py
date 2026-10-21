@@ -7,6 +7,7 @@ import time
 from typing import Optional
 
 import aiohttp
+from aiohttp import web
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
@@ -29,6 +30,7 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "").strip()
 GITHUB_REPO = os.getenv("GITHUB_REPO", "").strip()
 GITHUB_WORKFLOW_ID = os.getenv("GITHUB_WORKFLOW_ID", "build_apk.yml").strip()
 GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main").strip()
+PORT = int(os.getenv("PORT", "8080"))
 
 # Telegram Bot API limit for getFile/download
 MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
@@ -329,6 +331,24 @@ async def process_build_request(
     await state.set_state(BuildStates.waiting_for_input)
 
 
+async def health_check_handler(request: web.Request) -> web.Response:
+    """HTTP Health-check endpoint for Render / PaaS hosting."""
+    return web.Response(text="Bot is alive", status=200, content_type="text/plain")
+
+
+async def start_web_server(port: int) -> web.AppRunner:
+    """Starts lightweight HTTP health-check server on aiohttp."""
+    app = web.Application()
+    app.router.add_get("/", health_check_handler)
+    app.router.add_get("/healthz", health_check_handler)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host="0.0.0.0", port=port)
+    await site.start()
+    logger.info("HTTP Healthcheck server successfully started on http://0.0.0.0:%d", port)
+    return runner
+
+
 async def main():
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN is missing! Please configure bot/.env file.")
@@ -336,11 +356,13 @@ async def main():
         print("Создайте bot/.env из bot/.env.example и укажите токен вашего бота.\n")
         sys.exit(1)
 
+    runner = await start_web_server(PORT)
     bot = Bot(token=BOT_TOKEN)
     logger.info("Starting VibeAPK Builder Telegram Bot...")
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
+        await runner.cleanup()
         await bot.session.close()
 
 
