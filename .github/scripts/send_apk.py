@@ -42,23 +42,22 @@ def main():
         sys.exit(1)
 
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    apk_path = os.path.join(
-        project_root,
-        "android-template",
-        "app",
-        "build",
-        "outputs",
-        "apk",
-        "debug",
-        "app-debug.apk"
-    )
+    apk_dir = os.path.join(project_root, "android-template", "app", "build", "outputs", "apk")
+    
+    apk_candidates = []
+    if os.path.isdir(apk_dir):
+        for root, dirs, files in os.walk(apk_dir):
+            for file in files:
+                if file.endswith(".apk") and not file.endswith("-androidTest.apk"):
+                    apk_candidates.append(os.path.join(root, file))
 
-    if not os.path.isfile(apk_path):
-        print(f"APK file not found at {apk_path}!", file=sys.stderr)
+    if not apk_candidates:
+        print(f"No APK file found in {apk_dir}!", file=sys.stderr)
         sys.exit(1)
 
+    apk_path = apk_candidates[0]
     file_size_mb = os.path.getsize(apk_path) / (1024 * 1024)
-    print(f"Built APK found! Size: {file_size_mb:.2f} MB")
+    print(f"Built APK found at {apk_path}! Size: {file_size_mb:.2f} MB")
 
     # Sanitize file name for Telegram document
     clean_name = re.sub(r'[^a-zA-Z0-9_\-\u0400-\u04FF]', '_', app_name).strip('_')
