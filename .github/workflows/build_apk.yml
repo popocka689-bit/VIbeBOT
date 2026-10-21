@@ -1,0 +1,71 @@
+name: VibeAPK Cloud Builder
+
+on:
+  workflow_dispatch:
+    inputs:
+      chat_id:
+        description: 'Telegram Chat ID'
+        required: true
+        type: string
+      file_id:
+        description: 'Telegram File ID'
+        required: true
+        type: string
+      app_name:
+        description: 'Application Display Name'
+        required: true
+        type: string
+        default: 'VibeApp'
+      app_id:
+        description: 'Android Application Package ID'
+        required: true
+        type: string
+        default: 'com.vibeapp.app'
+
+jobs:
+  build:
+    name: Build & Ship APK
+    runs-on: ubuntu-latest
+
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      CHAT_ID: ${{ inputs.chat_id }}
+      FILE_ID: ${{ inputs.file_id }}
+      APP_NAME: ${{ inputs.app_name }}
+      APP_ID: ${{ inputs.app_id }}
+
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Notify Build Started
+        run: |
+          export STATUS=started
+          python3 .github/scripts/notify_status.py
+
+      - name: Set up JDK 17 (Temurin + Gradle Cache)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Grant Execute Permissions to Gradle Wrapper
+        run: chmod +x android-template/gradlew
+
+      - name: Prepare Assets and Configure Android Project
+        run: python3 .github/scripts/prepare_build.py
+
+      - name: Compile APK via Gradle
+        run: |
+          cd android-template
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload and Send APK to Telegram
+        run: python3 .github/scripts/send_apk.py
+
+      - name: Notify Build Failure
+        if: failure()
+        run: |
+          export STATUS=failed
+          python3 .github/scripts/notify_status.py

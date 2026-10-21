@@ -1,0 +1,35 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Environment variables & secrets
+.env
+bot/.env
+
+# Android & Gradle
+.gradle/
+build/
+*/build/
+app/build/
+android-template/.gradle/
+android-template/build/
+android-template/app/build/
+*.iml
+.idea/
+local.properties
+.cxx/
+*.apk
+*.aab
+
+# OS files
+.DS_Store
+Thumbs.db
