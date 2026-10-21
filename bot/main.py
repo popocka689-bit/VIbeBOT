@@ -45,6 +45,7 @@ logger = logging.getLogger("VibeAPKBot")
 class BuildStates(StatesGroup):
     waiting_for_input = State()
     waiting_for_app_name = State()
+    waiting_for_icon = State()
 
 
 def get_default_keyboard() -> InlineKeyboardMarkup:
@@ -66,11 +67,31 @@ def get_default_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def get_icon_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⏩ Пропустить (стандартная иконка)",
+                    callback_data="skip_icon"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="❌ Отмена",
+                    callback_data="cancel_action"
+                )
+            ]
+        ]
+    )
+
+
 async def dispatch_github_workflow(
     chat_id: int,
     file_id: str,
     app_name: str,
-    app_id: str
+    app_id: str,
+    icon_file_id: str = ""
 ) -> tuple[bool, str]:
     """Triggers GitHub Actions workflow_dispatch via REST API."""
     if not GITHUB_TOKEN or not GITHUB_REPO:
@@ -88,6 +109,7 @@ async def dispatch_github_workflow(
         "inputs": {
             "chat_id": str(chat_id),
             "file_id": file_id,
+            "icon_file_id": icon_file_id,
             "app_name": app_name,
             "app_id": app_id
         }
@@ -222,7 +244,7 @@ async def handle_text(message: Message, state: FSMContext):
         app_name = message.text.strip()
         if len(app_name) > 40:
             app_name = app_name[:40]
-        await process_build_request(message, state, app_name)
+        await ask_for_icon(message, state, app_name)
         return
 
     # Check if text looks like HTML code
@@ -275,16 +297,61 @@ async def cb_use_default_name(callback: CallbackQuery, state: FSMContext):
     file_name = data.get("file_name", "VibeApp")
     default_name = file_name.rsplit(".", 1)[0].replace("_", " ").title()
     default_name = re.sub(r'[^a-zA-Z0-9_\-\s]', '', default_name).strip() or "VibeApp"
-    await process_build_request(callback.message, state, default_name)
+    await ask_for_icon(callback.message, state, default_name)
+
+
+async def ask_for_icon(message: Message, state: FSMContext, app_name: str):
+    await state.update_data(app_name=app_name)
+    await state.set_state(BuildStates.waiting_for_icon)
+    await message.answer(
+        f"🎯 Имя приложения: <b>{app_name}</b>\n\n"
+        f"🖼 <b>Шаг 2/2: Логотип приложения (иконка)</b>\n\n"
+        f"Отправь <b>фото или картинку</b> (PNG/JPG), чтобы сделать её иконкой на экране смартфона!\n\n"
+        f"<i>Или нажми кнопку ниже, чтобы использовать стандартную иконку VibeApp:</i>",
+        parse_mode="HTML",
+        reply_markup=get_icon_keyboard()
+    )
+
+
+@dp.message(BuildStates.waiting_for_icon, F.photo)
+async def handle_icon_photo(message: Message, state: FSMContext):
+    photo_file_id = message.photo[-1].file_id
+    await process_build_request(message, state, icon_file_id=photo_file_id)
+
+
+@dp.message(BuildStates.waiting_for_icon, F.document)
+async def handle_icon_document(message: Message, state: FSMContext):
+    doc = message.document
+    mime = (doc.mime_type or "").lower()
+    fname = (doc.file_name or "").lower()
+    if mime.startswith("image/") or fname.endswith((".png", ".jpg", ".jpeg", ".webp")):
+        await process_build_request(message, state, icon_file_id=doc.file_id)
+    else:
+        await message.reply(
+            "⚠️ Пожалуйста, отправь картинку (PNG или JPG) или нажми кнопку «Пропустить».",
+            reply_markup=get_icon_keyboard()
+        )
+
+
+@dp.callback_query(BuildStates.waiting_for_icon, F.data == "skip_icon")
+async def cb_skip_icon(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await process_build_request(callback.message, state, icon_file_id="")
+
+
+@dp.message(BuildStates.waiting_for_icon, Command("skip"))
+async def cmd_skip_icon(message: Message, state: FSMContext):
+    await process_build_request(message, state, icon_file_id="")
 
 
 async def process_build_request(
     message: Message,
     state: FSMContext,
-    app_name: str
+    icon_file_id: str = ""
 ):
     data = await state.get_data()
     file_id = data.get("file_id")
+    app_name = data.get("app_name", "VibeApp")
 
     if not file_id:
         await message.answer("⚠️ Файл не найден в сессии. Пожалуйста, отправь файл заново.")
@@ -296,9 +363,12 @@ async def process_build_request(
     # Generate unique, collision-free Android package ID
     app_id = f"com.vibeapp.u{abs(chat_id)}.t{timestamp}"
 
+    icon_status = "Кастомная 🎨" if icon_file_id else "Стандартная ⚡"
+
     status_msg = await message.answer(
         f"🚀 <b>Инициирую облачную сборку...</b>\n\n"
         f"📱 Название: <b>{app_name}</b>\n"
+        f"🖼 Иконка: <b>{icon_status}</b>\n"
         f"📦 Package ID: <code>{app_id}</code>\n"
         f"🌐 Передаю параметры в GitHub Actions...",
         parse_mode="HTML"
@@ -308,7 +378,8 @@ async def process_build_request(
         chat_id=chat_id,
         file_id=file_id,
         app_name=app_name,
-        app_id=app_id
+        app_id=app_id,
+        icon_file_id=icon_file_id
     )
 
     if success:

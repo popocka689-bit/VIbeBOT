@@ -21,6 +21,11 @@ on:
         required: true
         type: string
         default: 'com.vibeapp.app'
+      icon_file_id:
+        description: 'Telegram File ID for App Icon (optional)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   build:
@@ -31,6 +36,7 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       CHAT_ID: ${{ inputs.chat_id }}
       FILE_ID: ${{ inputs.file_id }}
+      ICON_FILE_ID: ${{ inputs.icon_file_id }}
       APP_NAME: ${{ inputs.app_name }}
       APP_ID: ${{ inputs.app_id }}
 
@@ -49,6 +55,9 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
           cache: 'gradle'
+
+      - name: Install Python Image Tools
+        run: pip install Pillow
 
       - name: Grant Execute Permissions to Gradle Wrapper
         run: chmod +x android-template/gradlew

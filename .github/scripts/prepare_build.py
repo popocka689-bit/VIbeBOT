@@ -51,11 +51,83 @@ def find_web_root(extracted_dir: str) -> str:
 
     raise FileNotFoundError("Could not find 'index.html' inside the provided archive.")
 
+def process_custom_icon(icon_file_path: str, res_dir: str):
+    from PIL import Image
+
+    print(f"Processing custom app icon from {icon_file_path}...")
+    with Image.open(icon_file_path) as img:
+        img = img.convert("RGBA")
+
+        # 1. Square crop centered
+        w, h = img.size
+        min_dim = min(w, h)
+        left = (w - min_dim) // 2
+        top = (h - min_dim) // 2
+        cropped = img.crop((left, top, left + min_dim, top + min_dim))
+
+        # Standard launcher icon sizes (dp: mdpi=48, hdpi=72, xhdpi=96, xxhdpi=144, xxxhdpi=192)
+        densities = {
+            "mipmap-mdpi": 48,
+            "mipmap-hdpi": 72,
+            "mipmap-xhdpi": 96,
+            "mipmap-xxhdpi": 144,
+            "mipmap-xxxhdpi": 192,
+        }
+
+        # Adaptive icon foreground sizes (108dp base canvas)
+        fg_densities = {
+            "mipmap-mdpi": 108,
+            "mipmap-hdpi": 162,
+            "mipmap-xhdpi": 216,
+            "mipmap-xxhdpi": 324,
+            "mipmap-xxxhdpi": 432,
+        }
+
+        # Save standard legacy and round icons
+        for folder, size in densities.items():
+            folder_path = os.path.join(res_dir, folder)
+            os.makedirs(folder_path, exist_ok=True)
+
+            resized = cropped.resize((size, size), Image.Resampling.LANCZOS)
+            resized.save(os.path.join(folder_path, "ic_launcher.png"), "PNG")
+            resized.save(os.path.join(folder_path, "ic_launcher_round.png"), "PNG")
+
+        # Save adaptive foreground with safe-zone margin (~72% of 108dp canvas)
+        for folder, fg_size in fg_densities.items():
+            folder_path = os.path.join(res_dir, folder)
+            os.makedirs(folder_path, exist_ok=True)
+
+            fg_canvas = Image.new("RGBA", (fg_size, fg_size), (0, 0, 0, 0))
+            icon_size = int(fg_size * 0.72)
+            offset = (fg_size - icon_size) // 2
+
+            fg_icon = cropped.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
+            fg_canvas.paste(fg_icon, (offset, offset), fg_icon)
+            fg_canvas.save(os.path.join(folder_path, "ic_launcher_foreground.png"), "PNG")
+
+        # Update adaptive icon XML in mipmap-anydpi-v26
+        anydpi_dir = os.path.join(res_dir, "mipmap-anydpi-v26")
+        os.makedirs(anydpi_dir, exist_ok=True)
+        adaptive_xml = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
+            '    <background android:drawable="@color/background" />\n'
+            '    <foreground android:drawable="@mipmap/ic_launcher_foreground" />\n'
+            '</adaptive-icon>\n'
+        )
+        with open(os.path.join(anydpi_dir, "ic_launcher.xml"), "w", encoding="utf-8") as f:
+            f.write(adaptive_xml)
+        with open(os.path.join(anydpi_dir, "ic_launcher_round.xml"), "w", encoding="utf-8") as f:
+            f.write(adaptive_xml)
+
+        print("Custom app icon successfully generated for all densities!")
+
 def main():
     bot_token = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
     file_id = (os.environ.get("FILE_ID") or "").strip()
     app_name = (os.environ.get("APP_NAME") or "VibeApp").strip() or "VibeApp"
     app_id = (os.environ.get("APP_ID") or "").strip()
+    icon_file_id = (os.environ.get("ICON_FILE_ID") or "").strip()
 
     if not bot_token or not file_id:
         print("Missing TELEGRAM_BOT_TOKEN or FILE_ID", file=sys.stderr)
@@ -146,6 +218,18 @@ def main():
         )
         with open(build_gradle_path, "w", encoding="utf-8") as f:
             f.write(new_gradle_content)
+
+    # 5. Process custom app icon if provided
+    if icon_file_id:
+        print(f"Downloading and applying custom app icon (file_id: {icon_file_id})...")
+        with tempfile.TemporaryDirectory() as icon_tmp:
+            icon_file = os.path.join(icon_tmp, "custom_icon.png")
+            try:
+                download_file(bot_token, icon_file_id, icon_file)
+                res_dir = os.path.join(template_dir, "app", "src", "main", "res")
+                process_custom_icon(icon_file, res_dir)
+            except Exception as e:
+                print(f"Warning: Failed to process custom icon ({e}), falling back to default.", file=sys.stderr)
 
     print("Project prepared successfully for compilation!")
 
