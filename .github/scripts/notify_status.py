@@ -7,10 +7,10 @@ import urllib.request
 import json
 
 def main():
-    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_id = os.environ.get("CHAT_ID")
-    app_name = os.environ.get("APP_NAME", "VibeApp")
-    status = os.environ.get("STATUS", "started")
+    bot_token = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    chat_id = (os.environ.get("CHAT_ID") or "").strip()
+    app_name = (os.environ.get("APP_NAME") or "VibeApp").strip()
+    status = (os.environ.get("STATUS") or "started").strip()
 
     if not bot_token or not chat_id:
         print("Missing TELEGRAM_BOT_TOKEN or CHAT_ID, skipping notification.")

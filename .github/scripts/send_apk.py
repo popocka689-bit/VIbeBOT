@@ -32,10 +32,10 @@ def build_multipart_body(fields: dict, files: dict, boundary: str) -> bytes:
     return bytes(body)
 
 def main():
-    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_id = os.environ.get("CHAT_ID")
-    app_name = os.environ.get("APP_NAME", "VibeApp").strip() or "VibeApp"
-    app_id = os.environ.get("APP_ID", "com.vibeapp.app").strip()
+    bot_token = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    chat_id = (os.environ.get("CHAT_ID") or "").strip()
+    app_name = (os.environ.get("APP_NAME") or "VibeApp").strip() or "VibeApp"
+    app_id = (os.environ.get("APP_ID") or "com.vibeapp.app").strip()
 
     if not bot_token or not chat_id:
         print("Missing TELEGRAM_BOT_TOKEN or CHAT_ID", file=sys.stderr)

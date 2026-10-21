@@ -52,10 +52,10 @@ def find_web_root(extracted_dir: str) -> str:
     raise FileNotFoundError("Could not find 'index.html' inside the provided archive.")
 
 def main():
-    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    file_id = os.environ.get("FILE_ID")
-    app_name = os.environ.get("APP_NAME", "VibeApp").strip() or "VibeApp"
-    app_id = os.environ.get("APP_ID", "").strip()
+    bot_token = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    file_id = (os.environ.get("FILE_ID") or "").strip()
+    app_name = (os.environ.get("APP_NAME") or "VibeApp").strip() or "VibeApp"
+    app_id = (os.environ.get("APP_ID") or "").strip()
 
     if not bot_token or not file_id:
         print("Missing TELEGRAM_BOT_TOKEN or FILE_ID", file=sys.stderr)
